@@ -1,22 +1,35 @@
-# importing necessary libraries
-import sys
-
 import numpy as np
 import pandas
+from numpy import random, sqrt, log, sin, pi
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC as SupportVectorMachine
+
+from GUI import GUI
 
 debug = False
 assignmentFile = None
 errorPenalty = 1.75  # Accuracy caps out at 0.9924 after 1.68.
 subject = 0
-numSubjects = 7
 daysTillDue = 0
 timeToComplete = 0
 difficulty = 0
 
+gui = GUI("StudyIO")
+gui.data_setup()
+
+'''
 if len(sys.argv) > 1:
+    if any(arg == "-help" for arg in sys.argv):
+        print("Commands:")
+        print("-error")
+        print("-subject")
+        print("-days-due")
+        print("-time")
+        print("-difficulty")
+        print("-debug")
+        # Need to finish
+
     assignmentFile = ''.join([s for s in sys.argv if ".csv" in s])
     if any(arg == "-error" for arg in sys.argv):
         errorPenalty = float(sys.argv[sys.argv.index("-error") + 1])  # Get value after "-error"
@@ -43,7 +56,7 @@ if len(sys.argv) > 1:
             sys.exit()
 
     if any(arg == "-difficulty" for arg in sys.argv):
-        daysTillDue = int(sys.argv[sys.argv.index("-difficulty") + 1])  # Get value after "-subject"
+        difficulty = int(sys.argv[sys.argv.index("-difficulty") + 1])  # Get value after "-subject"
         if difficulty <= 0:
             print("ERROR: Difficulty must be greater than 0")
             sys.exit()
@@ -56,15 +69,27 @@ if len(sys.argv) > 1:
         print("Time to complete:", timeToComplete)
         print("Difficulty:", difficulty)
         debug = True
+'''
 
-dataframe_raw = pandas.read_csv(assignmentFile, header=0)
-# Get all but the first row (which is all the column names).
-dataset = dataframe_raw.iloc[1:].values
-features = dataset[:, 0:4].astype(float)
-labels = dataset[:, 4]  # Get answers
+dataframe_raw = pandas.read_csv(gui.assignment_file, header=0)
 if debug:
     pandas.set_option('display.max_rows', 10)  # Only print first 5 and last 5 rows (10 rows total)
     print(dataframe_raw)
+
+# Get all but the first row (which is all the column names).
+dataset = dataframe_raw.iloc[1:].values
+
+subject_list = pandas.unique(dataset[:, 0])
+gui.assignment_setup(subject_list)  # pass in all subject names
+for i, val in enumerate(dataset[:, 0]):
+    dataset[i, 0], = np.where(val == subject_list)[0]
+
+if debug:
+    pandas.set_option('display.max_rows', 10)  # Only print first 5 and last 5 rows (10 rows total)
+    print("\n", dataset, "\n")
+
+features = dataset[:, 0:4].astype('float')
+labels = dataset[:, 4].astype('float')  # Get answers
 
 # dividing features, labels into train and test data
 features_train, features_test, labels_train, labels_test = train_test_split(features, labels, random_state=0)
@@ -73,22 +98,42 @@ features_train, features_test, labels_train, labels_test = train_test_split(feat
 svm_model = SupportVectorMachine(kernel='rbf', C=errorPenalty).fit(features_train, labels_train)
 svm_predictions = svm_model.predict(features_test)
 
-# using classifier to predict
-'''
-MIGHT WANT TO CONSIDER NOT HAVING THE USER INPUT A TIMETOCOMPLETE (BECAUSE THEY DON'T
-KNOW THAT NUMBER BEFORE DOING THE ASSIGNMENT) AND INSTEAD USING THEIR AVERAGE TIMETOCOMPLETE
-FOR THAT SUBJECT FROM PAST ASSIGNMENTS OR SAMPLING FROM THEIR DISTRIBUTIONS (BOX-MULLER)
-'''
-assignment = np.array([subject, daysTillDue, timeToComplete, difficulty])
-assignment = assignment.reshape(1, -1)  # Need to do if it's a single sample
 
-answer = svm_model.predict(assignment)
-# model accuracy for X_test
-accuracy = svm_model.score(features_test, labels_test)
+# Box-Muller sampling method for generating normally distributed
+# random numbers from uniformly distributed random numbers.
+def sample(mean, std_dev):
+    u1 = 1.0 - random.rand()
+    u2 = 1.0 - random.rand()
+    rand_std_normal = sqrt(-2.0 * log(u1)) * sin(2.0 * pi * u2)
+    rand_normal = mean + std_dev * rand_std_normal
+    return rand_normal
 
-# creating a confusion matrix
-cm = confusion_matrix(labels_test, svm_predictions)
+
+if timeToComplete == 0:  # Didn't get a value for time to complete, need to sample one
+    timeToComplete_mean = dataset[:, 2].mean()
+    timeToComplete_stdDev = dataset[:, 2].std()
+    timeToComplete = sample(timeToComplete_mean, timeToComplete_stdDev)
+    if debug:
+        print("No time to complete provided. Using Box-Muller sampled value:", timeToComplete)
+
+# assignment = np.array([subject, daysTillDue, timeToComplete, difficulty])
+# assignment = assignment.reshape(1, -1)  # Need to do if it's a single sample
+
+
+
+# answer = svm_model.predict(assignment)[0].astype('int')
+
+answer = svm_model.predict(gui.assignment_list[0].get_array())
+
 if debug:
+    print("Assignment:", assignment)
+
+    # model accuracy for X_test
+    accuracy = svm_model.score(features_test, labels_test)
+
+    # creating a confusion matrix
+    cm = confusion_matrix(labels_test, svm_predictions)
+
     print("\n# Support Vectors:", svm_model.n_support_, "\n")
     print("Confusion Matrix:\n", cm, "\n")
     print("Accuracy:", accuracy)
