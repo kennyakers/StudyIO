@@ -108,7 +108,6 @@ def sample(mean, std_dev):
     rand_normal = mean + std_dev * rand_std_normal
     return rand_normal
 
-
 if timeToComplete == 0:  # Didn't get a value for time to complete, need to sample one
     timeToComplete_mean = dataset[:, 2].mean()
     timeToComplete_stdDev = dataset[:, 2].std()
@@ -118,12 +117,22 @@ if timeToComplete == 0:  # Didn't get a value for time to complete, need to samp
 
 # assignment = np.array([subject, daysTillDue, timeToComplete, difficulty])
 # assignment = assignment.reshape(1, -1)  # Need to do if it's a single sample
-
-
-
 # answer = svm_model.predict(assignment)[0].astype('int')
 
-answer = svm_model.predict(gui.assignment_list[0].get_array())
+# Replace subject name with corresponding index in subject_list, then predict priorities
+for assignment in gui.assignment_list:
+    temp_assign = np.array(  # Temporary array as to preserve subject names
+        [np.where(assignment.subject == subject_list)[0][0], assignment.days_till_due, assignment.time_to_complete,
+         assignment.difficulty])
+    assignment.priority = svm_model.predict(temp_assign.reshape(1, -1))[0].astype('int')
+
+
+def sort_priority(a):
+    return a.priority
+
+
+gui.assignment_list.sort(reverse=True, key=sort_priority)  # Sort highest priority assignments first
+gui.display_assignments()
 
 if debug:
     print("Assignment:", assignment)
@@ -138,4 +147,5 @@ if debug:
     print("Confusion Matrix:\n", cm, "\n")
     print("Accuracy:", accuracy)
 
-print("Answer:", answer)
+for assignment in gui.assignment_list:
+    print(assignment)
